@@ -3,23 +3,29 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-# The three possible overall statuses. Inheriting from str makes it serialize as plain text.
+# Single shared definition of the three system states: HEALTHY, WARNING, CRITICAL.
+# An Enum is used because status is one value from a fixed set, so typos fail early
+# Returned by classify_status (services/metrics_service.py).
 class SystemStatus(str, Enum):
     HEALTHY = "HEALTHY"
     WARNING = "WARNING"
     CRITICAL = "CRITICAL"
 
 
-# Raw numbers read from the machine, in percent.
+# Raw readings from the machine, in percent: CPU, memory and disk.
+# Created by _read_metrics (services/metrics_service.py).
+# A BaseModel, not an Enum: it holds three values at once, while an Enum holds only one.
 class Metrics(BaseModel):
     cpu_percent: float
     memory_percent: float
     disk_percent: float
 
 
-# What the LLM must return. We also pass this class to Gemini as the response schema,
-# so the model's reply is forced into exactly these two fields.
+# Passed to Gemini as response_schema (called in ai_service._call_llm). This is what makes
+# structured output possible: the reply is forced into a summary and a recommendation.
+# If the reply is unusable, _call_llm raises LLMUnavailableException and get_ai_analysis
+# returns the fallback, so the client still gets a normal 200 (no 422 or 500).
+
 class AIAnalysis(BaseModel):
     summary: str = Field(
         description="1-2 sentence plain-English summary of the system's current state."
@@ -29,14 +35,18 @@ class AIAnalysis(BaseModel):
     )
 
 
-# Response of GET /api/healthreport.
+# Response schema  of GET /api/healthreport.Automatically serialized to JSON by Fastapi
+
 class HealthReport(BaseModel):
     timestamp: datetime  # UTC time, serialized like 2026-11-21T16:30:00Z
     status: SystemStatus
     metrics: Metrics
     ai_analysis: AIAnalysis
 
-    # Example shown in the /docs page.
+    # Documentation only: shows this example response on the /docs page (development only).
+    # It does not affect validation or the real response.
+
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {

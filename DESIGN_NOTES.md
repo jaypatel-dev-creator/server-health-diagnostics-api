@@ -28,6 +28,8 @@ The route only coordinates. All logic lives in the two services. The settings, l
 
 **Thresholds are settings, and bad values stop startup.** A validator in `config.py` rejects a warning threshold that is not lower than the critical one. A wrong `.env` fails at startup instead of silently giving wrong statuses.
 
+**Settings use pydantic-settings, not `os.getenv`.** Environment variables are plain strings and `os.getenv` returns `None` on a typo. A `Settings` class converts types (for example `int` for the timeout), applies limits (`gt=0`, `le=100`), runs the threshold check at startup, keeps all defaults in one place, and reads `.env` with real environment variables taking priority. The result is one typed object that fails early with a clear message instead of failing later inside a request.
+
 **Disk is read from the home folder's drive.** This avoids hard-coding `C:\` or `/`, and works on both Windows and Linux.
 
 **Structured output from Gemini.** The `AIAnalysis` model (summary and recommendation) is passed to Gemini as the response schema, with the JSON mime type. The reply arrives already shaped, with no text parsing. The same model validates the result, so a missing field is caught.
@@ -43,6 +45,10 @@ The route only coordinates. All logic lives in the two services. The settings, l
 **Secrets stay out of errors.** `hide_input_in_errors=True` stops Pydantic from printing setting values, such as part of the API key, in a validation error.
 
 **Two layers of error handling.** Our own exceptions have a base class with a status code. A catch-all handler covers anything unexpected. For 5xx errors the real reason goes to the log and the client gets a generic message.
+
+**Logging is set up once, from the environment.** `core/logging.py` uses DEBUG level in development and INFO in production, with one format (time, level, module, message). Noisy libraries (`httpx`, `httpcore`, `google_genai`) are limited to warnings, so our own messages stay readable. Fallbacks and 5xx errors are logged with the real reason, while the client sees only a generic message.
+
+**Startup and shutdown use FastAPI's lifespan.** On startup the app logs its environment and warns if `LLM_API_KEY` is missing, so a missing key is visible immediately instead of only showing up as fallback responses. On shutdown it logs a stop message. The app is built in a `create_app()` factory, which keeps the setup in one place.
 
 **One endpoint only.** There is no `/health` or `/` route, because the task asks for a single endpoint. The interactive docs are shown only in development.
 

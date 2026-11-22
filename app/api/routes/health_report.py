@@ -9,7 +9,10 @@ from app.services.metrics_service import classify_status, collect_metrics
 
 router = APIRouter(tags=["Health Report"])
 
-
+# GET /api/healthreport: the only endpoint. Registered in main.py with the /api prefix.
+# Flow: collect_metrics -> classify_status -> get_ai_analysis -> return a HealthReport.
+# response_model makes FastAPI validate the response and turn it into JSON.
+# The route only coordinates; all the logic is in the two services.
 @router.get(
     "/healthreport",
     response_model=HealthReport,
@@ -23,7 +26,7 @@ async def get_health_report() -> HealthReport:
     metrics = await collect_metrics()
     status = classify_status(metrics, settings.warning_threshold, settings.critical_threshold)
 
-    # Step 2: ask the LLM for a summary. This never raises; on failure it returns a fallback.
+    # Step 2: ask the LLM for a summary,  on failure it returns a fallback.
     ai_analysis = await get_ai_analysis(metrics, status)
 
     return HealthReport(

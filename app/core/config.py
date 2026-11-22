@@ -5,9 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # LLM (Gemini). The key defaults to empty so the app still starts without it;
-    # the AI service then returns the fallback message instead of crashing.
-    llm_api_key: str = ""
+    
+    llm_api_key: str = "" #api key defaults to empty so the app still starts without it; the AI service then returns the fallback message instead of crashing.
     llm_model: str = "gemini-3.1-flash-lite"
     llm_timeout_seconds: int = Field(default=10, gt=0)  # max seconds for one LLM call
     llm_max_attempts: int = Field(default=2, ge=1)      # total tries before the fallback
@@ -27,9 +26,10 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,  # do not print setting values (like the API key) in errors
     )
 
+    # mode=after ==>  Runs after every field is read and range-checked, because it compares two fields.
+    # If warning is not lower than critical, startup fails with a clear message instead of classify_status silently returning wrong statuses.
     @model_validator(mode="after")
     def check_thresholds(self) -> "Settings":
-        # Fail at startup if the thresholds are misordered; otherwise statuses would be wrong.
         if self.warning_threshold >= self.critical_threshold:
             raise ValueError("WARNING_THRESHOLD must be lower than CRITICAL_THRESHOLD")
         return self

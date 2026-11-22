@@ -28,8 +28,15 @@ _FALLBACK_RECOMMENDATIONS = {
     SystemStatus.CRITICAL: "Investigate high resource usage now and free up resources.",
 }
 
+# Module-level singleton: one client is created on first use and reused for every request,
+# which is safe because it holds no per-request state.
+# Optional because it starts as None (lazy creation)(get_client initialies on first request, not on startup in lifespan ) ), so the app starts without an API key
+# and the client is never built when the key is missing.
 _client: Optional[genai.Client] = None
 
+
+
+# Private helper. Called by _call_llm (this file) to get the shared Gemini client.
 
 def _get_client() -> genai.Client:
     # Create the client once and reuse it.
@@ -39,13 +46,16 @@ def _get_client() -> genai.Client:
         _client = genai.Client(
             api_key=settings.llm_api_key,
             http_options=types.HttpOptions(
-                timeout=settings.llm_timeout_seconds * 1000,  # the SDK expects milliseconds
-                retry_options=types.HttpRetryOptions(attempts=settings.llm_max_attempts),
+                timeout=settings.llm_timeout_seconds * 1000,  #  timeout seconds ( the SDK expects milliseconds)
+                retry_options=types.HttpRetryOptions(attempts=settings.llm_max_attempts), #attempts for retry 
             ),
         )
     return _client
 
-
+# Builds the prompt text sent to Gemini: the three readings, the overall status with its
+# thresholds, and which metric is the highest. It asks for a short summary and one recommendation.
+# It states that the status is correct, so Gemini explains it instead of questioning it.
+# Called by _call_llm (this file). The response shape comes from response_schema, not from this prompt
 def _build_prompt(metrics: Metrics, status: SystemStatus) -> str:
     settings = get_settings()
     readings = {
@@ -53,7 +63,7 @@ def _build_prompt(metrics: Metrics, status: SystemStatus) -> str:
         "memory": metrics.memory_percent,
         "disk": metrics.disk_percent,
     }
-    busiest = max(readings, key=readings.get)  # the metric that decides the status
+    busiest = max(readings, key=readings.get)  # metric with higest value 
 
     return (
         "System metrics:\n"
@@ -70,35 +80,44 @@ def _build_prompt(metrics: Metrics, status: SystemStatus) -> str:
         "If the status is HEALTHY, say that no action is needed."
     )
 
-
+# Sends the prompt to Gemini and returns the reply as an AIAnalysis object.
+# Called by get_ai_analysis (this file). Raises LLMUnavailableException if the reply is unusable;
+# timeouts and API errors also propagate, and get_ai_analysis catches all of them and returns the fallback.
 async def _call_llm(metrics: Metrics, status: SystemStatus) -> AIAnalysis:
     settings = get_settings()
 
-    # Passing the Pydantic class as response_schema forces the reply into summary + recommendation.
+    # Creates the request using the async client (.aio). 
     request = _get_client().aio.models.generate_content(
-        model=settings.llm_model,
-        contents=_build_prompt(metrics, status),
+        model=settings.llm_model,                    # model name, from settings (LLM_MODEL)
+        contents=_build_prompt(metrics, status),     # the prompt text with the readings and status
         config=types.GenerateContentConfig(
-            system_instruction=_SYSTEM_INSTRUCTION,
-            response_mime_type="application/json",
-            response_schema=AIAnalysis,
-            temperature=0.2,
+            system_instruction=_SYSTEM_INSTRUCTION,  # the role of the model, sent separately from the data
+            response_mime_type="application/json",   # the reply must be JSON
+            response_schema=AIAnalysis,              # the JSON must match AIAnalysis (summary + recommendation) #structurd output is enforced here 
+            temperature=0.2,                         # low randomness, so answers are consistent and factual
         ),
     )
 
-    # Hard time limit, in case the SDK's own timeout does not fire.
+ # Backstop timeout, in case the SDK's own timeout does not fire. We set the limits explicitly:
+    # per-attempt timeout (LLM_TIMEOUT_SECONDS, default 10 s) x attempts (LLM_MAX_ATTEMPTS, default 2)
+    # + 5 s slack = 25 s maximum in total with the defaults.
     hard_limit = settings.llm_timeout_seconds * settings.llm_max_attempts + _HARD_LIMIT_SLACK_SECONDS
+    # Sends the request and waits for the reply; raises a timeout error if it takes longer than hard_limit.
     response = await asyncio.wait_for(request, timeout=hard_limit)
 
-    # "parsed" can be None, for example when the output is cut off.
+    # The SDK converts the JSON reply into an AIAnalysis object. It can be None, for example if the output is cut off.
     analysis = response.parsed
     if not isinstance(analysis, AIAnalysis):
         raise LLMUnavailableException("LLM returned no usable structured output.")
+    # The reply has the right shape but the text is empty or only spaces, so it is not useful either.
     if not analysis.summary.strip() or not analysis.recommendation.strip():
         raise LLMUnavailableException("LLM returned an empty summary or recommendation.")
     return analysis
 
-
+# Builds the fallback answer used when the LLM is not available: no API key, timeout, API error or unusable output. Same AIAnalysis shape as the real answer, so the JSON never changes.
+# The summary says AI analysis is unavailable and shows the current status, and the recommendation
+# is one fixed line per status from _FALLBACK_RECOMMENDATIONS. No LLM call is made here.
+# Called by get_ai_analysis (this file).
 def _fallback_analysis(status: SystemStatus) -> AIAnalysis:
     return AIAnalysis(
         summary=(
@@ -108,11 +127,11 @@ def _fallback_analysis(status: SystemStatus) -> AIAnalysis:
         recommendation=_FALLBACK_RECOMMENDATIONS[status],
     )
 
-
+# Main entry point of this file, called by the route (api/routes/health_report.py).
+# Returns the LLM analysis, or the fallback if the LLM is not available. 
 async def get_ai_analysis(metrics: Metrics, status: SystemStatus) -> AIAnalysis:
-    """Return the LLM analysis, or a fallback. This function never raises."""
     settings = get_settings()
-
+    # Missing key: return the fallback right away, without calling Gemini.
     if not settings.llm_api_key:
         logger.warning("LLM_API_KEY is not set. Using the fallback analysis.")
         return _fallback_analysis(status)
@@ -120,7 +139,7 @@ async def get_ai_analysis(metrics: Metrics, status: SystemStatus) -> AIAnalysis:
     try:
         return await _call_llm(metrics, status)
     except Exception as e:
-        # Broad on purpose: a timeout, network error, API error or bad output must not crash the API.
-        # CancelledError is not caught here, so a cancelled request still stops normally.
+        # Broad on purpose, so the API never crashes. It catches: a timeout (SDK or hard limit), a network error, an API error (including a wrong or rejected API key), and unusable output (LLMUnavailableException). The reason is logged and the fallback is returned.
+
         logger.warning(f"LLM call failed: {e!r}. Using the fallback analysis.")
         return _fallback_analysis(status)

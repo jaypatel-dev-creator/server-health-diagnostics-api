@@ -14,16 +14,15 @@ class HealthDiagnosticsException(Exception):
         super().__init__(message)
 
 
-# Raised when psutil cannot read a system metric.
+#  Raised in services/metrics_service.py (_read_metrics) when psutil cannot read a metric.
 class MetricsCollectionException(HealthDiagnosticsException):
     pass
 
 
-# Raised inside the AI service when the LLM call fails or returns nothing usable.
-# The AI service catches it and returns the fallback, so clients never see it.
+# Raised in services/ai_service.py (_call_llm) when Gemini's structured output fails 
 class LLMUnavailableException(HealthDiagnosticsException):
     def __init__(self, message: str = "LLM service unavailable."):
-        super().__init__(message=message, status_code=503)
+        super().__init__(message=message, status_code=503) #503 ==> service unavailable 
 
 
 # --- Exception handlers ---
@@ -41,6 +40,8 @@ async def health_exception_handler(
         error_name = "InternalServerError"
         client_message = "An unexpected error occurred."
     else:
+         # Not reached with the current exceptions: all of them use a status of 500 or higher.
+        # Kept so a future 4xx exception (for example 400 or 404) can show its own message.
         logger.warning(
             f"{exc.__class__.__name__} on {request.method} {request.url.path}: {exc.message}"
         )

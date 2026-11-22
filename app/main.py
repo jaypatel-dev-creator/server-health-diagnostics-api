@@ -11,9 +11,11 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger, setup_logging
 
-# Settings are loaded when the app is imported, so a bad .env stops the server right away.
+# Settings are loaded when the app is imported, so a bad .env stops the server right away.(fail fast)
 settings = get_settings()
+#setting out app level logging 
 setup_logging(settings.app_env)
+
 logger = get_logger(__name__)
 
 
@@ -38,6 +40,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         # The interactive docs are shown only in development.
         docs_url="/docs" if settings.app_env == "development" else None,
+        # ReDoc (the alternative docs page at /redoc) is switched off in every environment.
         redoc_url=None,
     )
 
