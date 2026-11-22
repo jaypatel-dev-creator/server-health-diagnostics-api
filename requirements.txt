@@ -12,9 +12,3 @@ psutil==7.2.2
 
 # LLM (Gemini)
 google-genai==2.7.0
-
-# HTTP (used by FastAPI's TestClient in tests)
-httpx==0.28.1
-
-# Testing
-pytest==9.2.0
