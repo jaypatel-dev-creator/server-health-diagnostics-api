@@ -129,6 +129,26 @@ With the LLM unavailable (wrong or missing key, timeout, API error). The respons
 }
 ```
 
+## Try the other statuses
+
+Your machine is probably `HEALTHY`. To see `WARNING` or `CRITICAL`, lower the thresholds for one run. Environment variables override `.env`.
+
+macOS / Linux:
+
+```
+WARNING_THRESHOLD=1 CRITICAL_THRESHOLD=2 uvicorn app.main:app
+```
+
+Windows (CMD):
+
+```
+set WARNING_THRESHOLD=1
+set CRITICAL_THRESHOLD=2
+uvicorn app.main:app
+```
+
+The `set` values last only for that terminal window. To see the fallback response, do the same with a wrong key: `LLM_API_KEY=wrong` (macOS / Linux) or `set LLM_API_KEY=wrong` (Windows).
+
 ## Status rules
 
 The overall status comes from the highest of the three metrics:

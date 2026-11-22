@@ -46,7 +46,7 @@ The route only coordinates. All logic lives in the two services. The settings, l
 
 **One endpoint only.** There is no `/health` or `/` route, because the task asks for a single endpoint. The interactive docs are shown only in development.
 
-**Python 3.10 or newer.** The pinned FastAPI version requires 3.10. The code itself avoids newer syntax.
+**Python 3.10 or newer, not 3.9.** The task says Python 3.9+. This project needs 3.10+ because the pinned FastAPI version requires it, and Python 3.9 reached end-of-life in October 2025. The code itself uses no 3.10-only syntax (such as `X | None`), so only the dependencies set the minimum.
 
 ## How it was checked
 
@@ -60,6 +60,8 @@ There is no automated test suite. The checks were run by hand against the runnin
 | Thresholds set to 1 and 2 | Status `CRITICAL`, recommendation about the busiest metric |
 | Thresholds set to 1 and 99 | Status `WARNING` |
 | Warning threshold higher than critical | Server refuses to start with a clear message |
+| Default model `gemini-3.1-flash-lite` | Worked with a valid key on 21 and 22 Nov 2026 |
+| Fresh clone from GitHub, install from `requirements.txt`, add key to `.env`, start the server | Real AI summary returned on 22 Nov 2026 |
 
 Not checked: a real network outage, and any Python version other than the one used for development.
 
@@ -74,5 +76,5 @@ Not checked: a real network outage, and any Python version other than the one us
 - It reports only the machine it runs on.
 - No authentication or rate limiting.
 - Each request takes at least 0.5 seconds because of CPU sampling.
-- The default model name may be retired in the future. It can be changed with `LLM_MODEL`.
+- The default model name worked on 22 Nov 2026 but may be retired later. It can be changed with `LLM_MODEL`.
 - Automated tests for the status rules and each fallback case would be the first thing to add.
