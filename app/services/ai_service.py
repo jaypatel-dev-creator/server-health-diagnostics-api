@@ -30,7 +30,7 @@ _FALLBACK_RECOMMENDATIONS = {
 
 # Module-level singleton: one client is created on first use and reused for every request,
 # which is safe because it holds no per-request state.
-# Optional because it starts as None (lazy creation)(get_client initialies on first request, not on startup in lifespan ) ), so the app starts without an API key
+# Optional because it starts as None (lazy creation): _get_client builds it on the first request, not at startup in lifespan, so the app starts without an API key
 # and the client is never built when the key is missing.
 _client: Optional[genai.Client] = None
 
@@ -47,7 +47,7 @@ def _get_client() -> genai.Client:
             api_key=settings.llm_api_key,
             http_options=types.HttpOptions(
                 timeout=settings.llm_timeout_seconds * 1000,  #  timeout seconds ( the SDK expects milliseconds)
-                retry_options=types.HttpRetryOptions(attempts=settings.llm_max_attempts), #attempts for retry 
+                retry_options=types.HttpRetryOptions(attempts=settings.llm_max_attempts), # total tries, including the first one
             ),
         )
     return _client
@@ -63,7 +63,7 @@ def _build_prompt(metrics: Metrics, status: SystemStatus) -> str:
         "memory": metrics.memory_percent,
         "disk": metrics.disk_percent,
     }
-    busiest = max(readings, key=readings.get)  # metric with higest value 
+    busiest = max(readings, key=readings.get)  # metric with highest value
 
     return (
         "System metrics:\n"
@@ -93,8 +93,8 @@ async def _call_llm(metrics: Metrics, status: SystemStatus) -> AIAnalysis:
         config=types.GenerateContentConfig(
             system_instruction=_SYSTEM_INSTRUCTION,  # the role of the model, sent separately from the data
             response_mime_type="application/json",   # the reply must be JSON
-            response_schema=AIAnalysis,              # the JSON must match AIAnalysis (summary + recommendation) #structurd output is enforced here 
-            temperature=0.2,                         # low randomness, so answers are consistent and factual
+            response_schema=AIAnalysis,              # the JSON must match AIAnalysis (summary + recommendation) # structured output is enforced here
+            temperature=0.2,                         # low randomness, so answers are more consistent
         ),
     )
 

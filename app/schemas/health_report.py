@@ -35,7 +35,7 @@ class AIAnalysis(BaseModel):
     )
 
 
-# Response schema  of GET /api/healthreport.Automatically serialized to JSON by Fastapi
+# Response schema of GET /api/healthreport. Automatically serialized to JSON by FastAPI.
 
 class HealthReport(BaseModel):
     timestamp: datetime  # UTC time, serialized like 2026-11-21T16:30:00Z

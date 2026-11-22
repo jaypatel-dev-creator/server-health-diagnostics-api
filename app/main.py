@@ -11,9 +11,9 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger, setup_logging
 
-# Settings are loaded when the app is imported, so a bad .env stops the server right away.(fail fast)
+# Settings are loaded when the app is imported, so a bad .env stops the server right away (fail fast).
 settings = get_settings()
-#setting out app level logging 
+# Set up app-level logging.
 setup_logging(settings.app_env)
 
 logger = get_logger(__name__)

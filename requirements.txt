@@ -5,7 +5,7 @@ uvicorn==0.48.0
 # Pydantic / Config
 pydantic==2.13.4
 pydantic-settings==2.14.1
-python-dotenv==1.2.2 #pydantic uses this internally to read environment configurations 
+python-dotenv==1.2.2  # used by pydantic-settings to read the .env file
 
 # System metrics
 psutil==7.2.2

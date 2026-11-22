@@ -22,23 +22,17 @@ The route only coordinates. All logic lives in the two services. The settings, l
 
 **Async endpoint, blocking work in a thread.** The Gemini call is async, so the endpoint is `async def`. `psutil` calls block, so they run through `asyncio.to_thread`. Otherwise the CPU sampling would freeze the event loop for every other request.
 
-**CPU is sampled over 0.5 seconds.** `psutil.cpu_percent()` without an interval returns `0.0` on the first call. The half-second sample gives a real number, at the cost of that much latency per request.
-
-**Status comes from the worst metric.** One overloaded resource is enough to call the system stressed. The comparison is strictly greater than, so exactly 85% is `WARNING` and exactly 70% is `HEALTHY`, matching the task's ">85" and ">70".
+**The highest metric decides the status.** If CPU, memory or disk is high, the system is under stress, even when the other two are fine. A value has to be above the limit to count: exactly 85% is still `WARNING`, and exactly 70% is still `HEALTHY`. This follows the task's ">85" and ">70".
 
 **Thresholds are settings, and bad values stop startup.** A validator in `config.py` rejects a warning threshold that is not lower than the critical one. A wrong `.env` fails at startup instead of silently giving wrong statuses.
 
-**Settings use pydantic-settings, not `os.getenv`.** Environment variables are plain strings and `os.getenv` returns `None` on a typo. A `Settings` class converts types (for example `int` for the timeout), applies limits (`gt=0`, `le=100`), runs the threshold check at startup, keeps all defaults in one place, and reads `.env` with real environment variables taking priority. The result is one typed object that fails early with a clear message instead of failing later inside a request.
+**Settings use pydantic-settings, not `os.getenv`.** `os.getenv` returns plain text, or `None` if the name is missing or misspelled. `pydantic-settings` keeps all settings in one `Settings` class. It turns each value into the right type (for example a number for the timeout), checks the limits, keeps every default in one place, and reads `.env` while real environment variables take priority. A bad value stops the app at startup with a clear message, instead of failing later inside a request.
 
-**Disk is read from the home folder's drive.** This avoids hard-coding `C:\` or `/`, and works on both Windows and Linux.
 
 **Structured output from Gemini.** The `AIAnalysis` model (summary and recommendation) is passed to Gemini as the response schema, with the JSON mime type. The reply arrives already shaped, with no text parsing. The same model validates the result, so a missing field is caught.
 
 **Prompt design.** A short system instruction sets the role. The prompt then lists the three metrics, the status and the thresholds, names the highest metric (the one that decided the status), and asks for exactly two things: a 1 to 2 sentence summary and one recommendation. It says the status is correct, so the model explains it instead of questioning it. For `HEALTHY` it must say no action is needed.
 
-**Fallback never raises.** `get_ai_analysis()` catches every failure and returns a fallback with the same JSON shape. The cases are: missing key, timeout, API error, `parsed` being `None` (for example when output is cut off), and empty fields. The fallback text says the AI is unavailable and gives generic advice for the current status. `CancelledError` is not caught, so a cancelled request still stops normally.
-
-**Three limits on the LLM call.** The SDK timeout (10 s per request), the retry count (2 attempts), and a hard `asyncio.wait_for` limit as a backstop. The SDK retries failed calls on its own by default, so the limits are set explicitly.
 
 **The API key is optional.** The app starts without a key and uses the fallback, as the task requires. The key lives only in `.env`, which is ignored by Git. `.env.example` shows the variables with no real values.
 
@@ -71,9 +65,8 @@ There is no automated test suite. The checks were run by hand against the runnin
 
 Not checked: a real network outage, and any Python version other than the one used for development.
 
-## Problems found while testing
+## Problem found while testing
 
-- With artificial thresholds, Gemini called the `CRITICAL` status "inconsistent" with the metrics. The prompt now states that the status is correct and names the metric that caused it.
 - A config validation error printed the first characters of the API key. Fixed with `hide_input_in_errors=True`.
 
 ## Known limitations and next steps

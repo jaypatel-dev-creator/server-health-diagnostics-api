@@ -26,7 +26,7 @@ async def get_health_report() -> HealthReport:
     metrics = await collect_metrics()
     status = classify_status(metrics, settings.warning_threshold, settings.critical_threshold)
 
-    # Step 2: ask the LLM for a summary,  on failure it returns a fallback.
+    # Step 2: ask the LLM for a summary. On failure it returns a fallback.
     ai_analysis = await get_ai_analysis(metrics, status)
 
     return HealthReport(
